@@ -4,14 +4,21 @@ from keras_core.backend.common import global_state
 
 
 @contextlib.contextmanager
-def keras_option_scope(use_legacy_config=True):
+def keras_option_scope(use_legacy_config=True, save_traces=True):
+    save_traces_prev_value = global_state.get_global_attribute(
+        "save_traces", None
+    )
     use_legacy_config_prev_value = global_state.get_global_attribute(
         "use_legacy_config", None
     )
+    global_state.set_global_attribute("save_traces", save_traces)
     global_state.set_global_attribute("use_legacy_config", use_legacy_config)
     try:
         yield
     finally:
+        global_state.set_global_attribute(
+            "save_traces", save_traces_prev_value
+        )
         global_state.set_global_attribute(
             "use_legacy_config", use_legacy_config_prev_value
         )
