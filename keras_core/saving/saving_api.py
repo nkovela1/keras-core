@@ -5,6 +5,8 @@ from absl import logging
 
 from keras_core.api_export import keras_core_export
 from keras_core.legacy.saving import legacy_h5_format
+from keras_core.legacy.saving.saved_model import save as saved_model_save
+from keras_core.legacy.saving.saved_model import load as saved_model_load
 from keras_core.saving import saving_lib
 from keras_core.utils import file_utils
 from keras_core.utils import io_utils
@@ -54,6 +56,9 @@ def save_model(model, filepath, overwrite=True, save_format=None, **kwargs):
     """
     save_format = get_save_format(filepath, save_format)
     include_optimizer = kwargs.pop("include_optimizer", True)
+    signatures = kwargs.pop("signatures", None)
+    options = kwargs.pop("options", None)
+    save_traces = kwargs.pop("save_traces", True)
     if kwargs:
         raise ValueError(
             "The following argument(s) are not supported: "
@@ -85,19 +90,21 @@ def save_model(model, filepath, overwrite=True, save_format=None, **kwargs):
             model, filepath, overwrite, include_optimizer
         )
     else:
-        # TODO(nkovela): Replace code route when SavedModel format is supported
-        raise ValueError(
-            "Invalid filepath extension for saving. "
-            "Please add either a `.keras` extension for the native Keras "
-            f"format (recommended) or a `.h5` extension. "
-            f"Received: filepath = {filepath}."
+        saved_model_save.save(
+            model,
+            filepath,
+            overwrite, 
+            include_optimizer,
+            signatures,
+            options,
+            save_traces,
         )
 
 
 @keras_core_export(
     ["keras_core.saving.load_model", "keras_core.models.load_model"]
 )
-def load_model(filepath, custom_objects=None, compile=True, safe_mode=True):
+def load_model(filepath, custom_objects=None, compile=True, safe_mode=True, options=None):
     """Loads a model saved via `model.save()`.
 
     Args:
@@ -167,10 +174,7 @@ def load_model(filepath, custom_objects=None, compile=True, safe_mode=True):
     if save_format == "h5":
         return legacy_h5_format.load_model_from_hdf5(filepath)
     else:
-        # TODO(nkovela): Replace code route when SavedModel format is supported
-        raise NotImplementedError(
-            "The SavedModel format is not currently supported."
-        )
+        return saved_model_load.load(filepath, compile, options)
 
 
 def load_weights(model, filepath, skip_mismatch=False, **kwargs):
