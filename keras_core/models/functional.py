@@ -420,11 +420,11 @@ class Functional(Function, Model):
         return copy.deepcopy(config)
 
     @classmethod
-    def _from_config(cls, config, custom_objects=None):
+    def _from_config(cls, config, custom_objects=None, created_layers=None):
         """Instantiates a Model from its config (output of `get_config()`)."""
         # Layer instances created during
         # the graph reconstruction process
-        created_layers = {}
+        created_layers = created_layers or {}
 
         # Dictionary mapping layer instances to
         # node data that specifies a layer call.

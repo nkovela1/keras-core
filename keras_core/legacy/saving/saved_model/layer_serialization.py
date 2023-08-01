@@ -28,7 +28,7 @@ class LayerSavedModelSaver(base_serialization.SavedModelSaver):
         metadata = dict(
             name=self.obj.name,
             trainable=self.obj.trainable,
-            expects_training_arg=self.obj._call_has_training_arg,
+            call_has_training_arg=self.obj._call_has_training_arg,
             dtype=resolve_policy(self.obj.dtype_policy),
             batch_shape=getattr(self.obj, "batch_shape", None),
             stateful=self.obj.stateful,

@@ -1,5 +1,5 @@
 import tensorflow as tf
-
+import contextlib
 
 def get_tensor_spec(t, dynamic_batch=False, name=None):
     """Returns a `TensorSpec` given a single `Tensor` or `TensorSpec`."""
@@ -25,3 +25,15 @@ def get_tensor_spec(t, dynamic_batch=False, name=None):
     shape = tf.TensorShape(shape_list)
     spec._shape = shape
     return spec
+
+
+@contextlib.contextmanager
+def graph_context_for_symbolic_tensors(*args, **kwargs):
+    """Returns graph context manager if any of the inputs is a symbolic
+    tensor."""
+    if any(is_symbolic_tensor(v) for v in list(args) + list(kwargs.values())):
+        from keras_core.legacy.backend import get_graph
+        with get_graph().as_default():
+            yield
+    else:
+        yield

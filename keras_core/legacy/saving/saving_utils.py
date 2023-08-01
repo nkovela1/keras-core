@@ -215,3 +215,11 @@ def raise_model_input_error(model):
         "sure to invoke the forward pass in train step through "
         "`Model.__call__`, i.e. `model(inputs)`, as opposed to `model.call()`."
     )
+
+
+def get_builtin_layer(class_name):
+    """Returns class if `class_name` is registered, else returns None."""
+    if not hasattr(MODULE_OBJECTS, "ALL_OBJECTS"):
+        MODULE_OBJECTS.ALL_OBJECTS = layers.__dict__
+        MODULE_OBJECTS.ALL_OBJECTS["InputLayer"] = layers.InputLayer
+    return MODULE_OBJECTS.ALL_OBJECTS.get(class_name)

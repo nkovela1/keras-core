@@ -899,6 +899,14 @@ def gather(reference, indices):
     return tf.compat.v1.gather(reference, indices)
 
 
+def get_graph():
+    if tf.executing_eagerly():
+        graph = tf.__internal__.FuncGraph("keras_graph")
+        return graph
+    else:
+        return tf.compat.v1.get_default_graph()
+
+
 @keras_core_export("keras_core._legacy.backend.get_value")
 def get_value(x):
     """DEPRECATED."""
@@ -2195,6 +2203,14 @@ def to_dense(tensor):
         return tf.sparse.to_dense(tensor)
     else:
         return tensor
+
+
+@keras_core_export("keras_core._legacy.backend.track_variable")
+def track_variable(v):
+    """Tracks the given variable for initialization."""
+    if tf.executing_eagerly():
+        return
+    graph = v.graph if hasattr(v, "graph") else get_graph()
 
 
 @keras_core_export("keras_core._legacy.backend.transpose")
