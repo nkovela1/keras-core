@@ -668,16 +668,16 @@ class Layer(BackendLayer, Operation):
                     )
 
         # Caches info about `call()` signature, args, kwargs.
-        self._call_spec = CallSpec(self._call_signature, args, kwargs)
+        call_spec = CallSpec(self._call_signature, args, kwargs)
 
         ############################################
         # 3. Check input spec for 1st positional arg.
         # TODO: consider extending this to all args and kwargs.
-        self._assert_input_compatibility(self._call_spec.first_arg)
+        self._assert_input_compatibility(call_spec.first_arg)
 
         ################
         # 4. Call build.
-        self._maybe_build(self._call_spec)
+        self._maybe_build(call_spec)
 
         ##########################
         # 5. Infer training value
@@ -692,13 +692,13 @@ class Layer(BackendLayer, Operation):
         call_context = self._get_call_context()
 
         # This is the value explicity passed by the user
-        training = self._call_spec.user_arguments_dict.get("training", None)
+        training = call_spec.user_arguments_dict.get("training", None)
         if training is None:
             # Wasn't passed explicitly: use context value
             training = call_context.training
             if training is None:
                 # Get signature default value
-                training = self._call_spec.arguments_dict.get("training", None)
+                training = call_spec.arguments_dict.get("training", None)
         call_context.training = training
         if self._call_has_training_arg and training is not None:
             # Only populate arg if it has a concrete value
@@ -706,23 +706,23 @@ class Layer(BackendLayer, Operation):
 
         ##############################
         # 6. Populate mask argument(s)
-        if len(self._call_spec.tensor_arguments_dict) == 1:
+        if len(call_spec.tensor_arguments_dict) == 1:
             if (
-                "mask" in self._call_spec.argument_names
-                and self._call_spec.arguments_dict["mask"] is None
+                "mask" in call_spec.argument_names
+                and call_spec.arguments_dict["mask"] is None
             ):
-                arg_name = list(self._call_spec.tensor_arguments_dict.keys())[0]
-                only_tensor_arg = self._call_spec.tensor_arguments_dict[arg_name]
+                arg_name = list(call_spec.tensor_arguments_dict.keys())[0]
+                only_tensor_arg = call_spec.tensor_arguments_dict[arg_name]
                 mask = tree.map_structure(
                     lambda x: getattr(x, "_keras_mask", None),
                     only_tensor_arg,
                 )
                 kwargs["mask"] = mask
-        elif len(self._call_spec.tensor_arguments_dict) > 1:
-            for k, v in self._call_spec.tensor_arguments_dict.items():
+        elif len(call_spec.tensor_arguments_dict) > 1:
+            for k, v in call_spec.tensor_arguments_dict.items():
                 expected_mask_arg_name = f"{k}_mask"
-                if expected_mask_arg_name in self._call_spec.argument_names:
-                    if self._call_spec.arguments_dict[expected_mask_arg_name] is None:
+                if expected_mask_arg_name in call_spec.argument_names:
+                    if call_spec.arguments_dict[expected_mask_arg_name] is None:
                         mask = tree.map_structure(
                             lambda x: getattr(x, "_keras_mask", None), v
                         )
@@ -750,10 +750,10 @@ class Layer(BackendLayer, Operation):
             # Set masks on outputs,
             # provided only the first positional input arg and its mask.
             # TODO: consider extending this to all args and kwargs.
-            previous_mask = getattr(self._call_spec.first_arg, "_keras_mask", None)
+            previous_mask = getattr(call_spec.first_arg, "_keras_mask", None)
             if self.supports_masking:
                 self._set_mask_metadata(
-                    self._call_spec.first_arg, outputs, previous_mask
+                    call_spec.first_arg, outputs, previous_mask
                 )
             elif previous_mask is not None:
                 warnings.warn(
@@ -879,12 +879,12 @@ class Layer(BackendLayer, Operation):
             return super().compute_output_spec(*args, **kwargs)
         else:
             # Use compute_output_shape() to return the right output spec
-            self._call_spec = CallSpec(self._call_signature, args, kwargs)
-            shapes_dict = get_shapes_dict(self._call_spec)
+            call_spec = CallSpec(self._call_signature, args, kwargs)
+            shapes_dict = get_shapes_dict(call_spec)
             shapes_dict = update_shapes_dict_for_target_fn(
                 self.compute_output_shape,
                 shapes_dict=shapes_dict,
-                self._call_spec=self._call_spec,
+                call_spec=call_spec,
                 class_name=self.__class__.__name__,
             )
             output_shape = self.compute_output_shape(**shapes_dict)
@@ -1072,9 +1072,9 @@ class Layer(BackendLayer, Operation):
             )
         return summary_utils.count_params(self.weights)
 
-    def _maybe_build(self, self._call_spec):
+    def _maybe_build(self, call_spec):
         if not self.built:
-            shapes_dict = get_shapes_dict(self._call_spec)
+            shapes_dict = get_shapes_dict(call_spec)
             self._build_shapes_dict = shapes_dict
 
             with backend.name_scope(self.name):
@@ -1082,7 +1082,7 @@ class Layer(BackendLayer, Operation):
                     shapes_dict = update_shapes_dict_for_target_fn(
                         self.build,
                         shapes_dict=shapes_dict,
-                        self._call_spec=self._call_spec,
+                        call_spec=call_spec,
                         class_name=self.__class__.__name__,
                     )
                     self.build(**shapes_dict)
@@ -1095,7 +1095,7 @@ class Layer(BackendLayer, Operation):
                     else:
                         success = self._build_by_run_for_kwargs(shapes_dict)
                     if not success:
-                        if self._call_spec.eager:
+                        if call_spec.eager:
                             # Will let the actual eager call do state-building
                             return
                         raise ValueError(
@@ -1120,7 +1120,7 @@ class Layer(BackendLayer, Operation):
 
             # Check input spec again (after build, since self.input_spec
             # may have been updated
-            self._assert_input_compatibility(self._call_spec.first_arg)
+            self._assert_input_compatibility(call_spec.first_arg)
             # Hook used to do post-build actions
             self._post_build()
         if not self._tracker.locked:
@@ -1341,25 +1341,25 @@ def get_arguments_dict(fn, args, kwargs):
     return arg_dict
 
 
-def get_shapes_dict(self._call_spec):
+def get_shapes_dict(call_spec):
     """Convert the call() arguments dict into a dict of input shape arguments.
 
     Example:
 
     ```
-    >>> get_shapes_dict(self._call_spec)
+    >>> get_shapes_dict(call_spec)
     {"input_a_shape": (2, 3)}
     ```
     """
     shapes_dict = {}
-    for k, v in self._call_spec.tensor_arguments_dict.items():
+    for k, v in call_spec.tensor_arguments_dict.items():
         if k == "mask" or k.endswith("_mask"):
             # Do not include mask tensors in shapes dict
             continue
         if k == "kwargs" or k == "args":
             # Do not include catch-alls in shapes dict
             continue
-        if k in self._call_spec.nested_tensor_argument_names:
+        if k in call_spec.nested_tensor_argument_names:
             shapes_dict[f"{k}_shape"] = tree.map_structure(
                 lambda x: backend.standardize_shape(x.shape), v
             )
@@ -1371,7 +1371,7 @@ def get_shapes_dict(self._call_spec):
 def update_shapes_dict_for_target_fn(
     target_fn,
     shapes_dict,
-    self._call_spec,
+    call_spec,
     class_name,
 ):
     """Updates a `shapes_dict` for `build()` or `compute_output_shape()`.
@@ -1427,7 +1427,7 @@ def update_shapes_dict_for_target_fn(
                 f"`{name}`, which does not end in `_shape`."
             )
         expected_call_arg = utils.removesuffix(name, "_shape")
-        if expected_call_arg not in self._call_spec.arguments_dict:
+        if expected_call_arg not in call_spec.arguments_dict:
             raise ValueError(
                 f"{error_preamble} For layer '{class_name}', "
                 f"received `{method_name}()` argument "

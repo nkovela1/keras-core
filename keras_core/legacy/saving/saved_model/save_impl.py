@@ -1,10 +1,10 @@
-from keras_core.models import Model
 from absl import logging
 
 
 def should_skip_serialization(layer):
     """Skip serializing extra objects and functions if layer inputs aren't
     set."""
+    from keras_core.models import Model
     saved_model_input_spec_set = (
         isinstance(layer, Model)
         and layer._saved_model_inputs_spec is not None

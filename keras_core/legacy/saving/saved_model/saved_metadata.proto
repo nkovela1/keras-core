@@ -2,9 +2,9 @@
 
 syntax = "proto3";
 
-package keras_core.legacy.saving.saved_model
+package keras_core.legacy.saving.saved_model;
 
-import "keras_core/legacy/saving/saved_model/versions.proto";
+import "version.proto";
 
 message SavedMetadata {
   // Nodes represent trackable objects in the SavedModel. The data for every

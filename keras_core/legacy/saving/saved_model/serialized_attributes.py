@@ -4,10 +4,6 @@ from keras_core.legacy.saving.saved_model import constants
 from keras_core.legacy.saving.saved_model import order_preserving_set as ops
 from keras_core.legacy.saving.saved_model import save_impl
 
-from keras_core.models import Model
-from keras_core.metrics import Metric
-from keras_core.layers import Layer
-from keras_core.layers import RNN
 
 class SerializedAttributes:
     """Class that tracks and validates all serialization attributes.
@@ -117,6 +113,11 @@ class SerializedAttributes:
     @staticmethod
     def new(obj):
         """Returns a new SerializedAttribute object."""
+        from keras_core.models import Model
+        from keras_core.metrics import Metric
+        from keras_core.layers import Layer
+        from keras_core.layers import RNN
+
         if isinstance(obj, Model):
             return ModelAttributes()
         elif isinstance(obj, Metric):
