@@ -52,7 +52,7 @@ def get_subclassed_model(keras):
 
 
 @pytest.mark.requires_trainable_backend
-class LegacyH5WholeModelTest(testing.TestCase):
+class SavedModelWholeModelTest(testing.TestCase):
     def _check_reloading_model(self, ref_input, model):
         # Whole model file
         ref_output = model(ref_input)

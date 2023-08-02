@@ -415,6 +415,14 @@ class IntegerLookup(Layer):
         """
         return self.layer.vocabulary_size()
 
+    @property
+    def _trackable_saved_model_saver(self):
+        # TF-specific attribute for compatibility with legacy SavedModel format
+        if backend.backend() == "tensorflow":
+            from keras_core.legacy.saving.saved_model import layer_serialization
+            return layer_serialization.VocabularySavedModelSaver(self)
+        return None
+
     def get_config(self):
         config = self.layer.get_config()
         if config["oov_token"] is not None:

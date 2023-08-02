@@ -454,6 +454,14 @@ class Model(Trainer, Layer):
             "TensorFlow SavedModel for your Keras Core model."
         )
 
+    @property
+    def _trackable_saved_model_saver(self):
+        # TF-specific attribute for compatibility with legacy SavedModel format
+        if backend.backend() == "tensorflow":
+            from keras_core.legacy.saving.saved_model import model_serialization
+            return model_serialization.ModelSavedModelSaver(self)
+        return None
+
     @classmethod
     def from_config(cls, config, custom_objects=None):
         from keras_core.models.functional import Functional

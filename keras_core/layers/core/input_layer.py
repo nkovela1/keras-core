@@ -67,6 +67,14 @@ class InputLayer(Layer):
     def dtype(self):
         return self._dtype
 
+    @property
+    def _trackable_saved_model_saver(self):
+        # TF-specific attribute for compatibility with legacy SavedModel format
+        if backend.backend() == "tensorflow":
+            from keras_core.legacy.saving.saved_model import layer_serialization
+            return layer_serialization.InputLayerSavedModelSaver(self)
+        return None
+
     def get_config(self):
         return {
             "batch_shape": self.batch_shape,

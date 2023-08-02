@@ -204,6 +204,14 @@ class Metric:
     def from_config(cls, config):
         return cls(**config)
 
+    @property
+    def _trackable_saved_model_saver(self):
+        # TF-specific attribute for compatibility with legacy SavedModel format
+        if backend.backend() == "tensorflow":
+            from keras_core.legacy.saving.saved_model import metric_serialization
+            return metric_serialization.MetricSavedModelSaver(self)
+        return None
+
     def __setattr__(self, name, value):
         # Track Variables, Layers, Metrics
         if hasattr(self, "_tracker"):

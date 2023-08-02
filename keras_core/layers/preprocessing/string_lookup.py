@@ -416,6 +416,14 @@ class StringLookup(Layer):
         """
         return self.layer.vocabulary_size()
 
+    @property
+    def _trackable_saved_model_saver(self):
+        # TF-specific attribute for compatibility with legacy SavedModel format
+        if backend.backend() == "tensorflow":
+            from keras_core.legacy.saving.saved_model import layer_serialization
+            return layer_serialization.VocabularySavedModelSaver(self)
+        return None
+
     def get_config(self):
         return self.layer.get_config()
 

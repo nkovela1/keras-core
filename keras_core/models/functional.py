@@ -341,6 +341,14 @@ class Functional(Function, Model):
     def input_spec(self, value):
         self._manual_input_spec = value
 
+    @property
+    def _trackable_saved_model_saver(self):
+        # TF-specific attribute for compatibility with legacy SavedModel format
+        if backend.backend() == "tensorflow":
+            from keras_core.legacy.saving.saved_model import network_serialization
+            return network_serialization.NetworkSavedModelSaver(self)
+        return None
+
     def get_config(self):
         if not functional_like_constructor(self.__class__):
             # Subclassed networks are not serializable

@@ -254,6 +254,14 @@ class Sequential(Model):
             f"Sequential model '{self.name}' has no defined outputs yet."
         )
 
+    @property
+    def _trackable_saved_model_saver(self):
+        # TF-specific attribute for compatibility with legacy SavedModel format
+        if backend.backend() == "tensorflow":
+            from keras_core.legacy.saving.saved_model import model_serialization
+            return model_serialization.SequentialSavedModelSaver(self)
+        return None
+
     def _is_layer_name_unique(self, layer):
         for ref_layer in self._layers:
             if layer.name == ref_layer.name and ref_layer is not layer:
