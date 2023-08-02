@@ -1,7 +1,14 @@
+import os
+
+import numpy as np
+import pytest
+import tensorflow as tf
+
 import keras_core
 from keras_core import layers
 from keras_core import models
 from keras_core import testing
+from keras_core.saving import load_model
 from keras_core.legacy.saving.saved_model import save as saved_model_save
 from keras_core.legacy.saving.saved_model import load as saved_model_load
 
@@ -56,8 +63,10 @@ class SavedModelWholeModelTest(testing.TestCase):
     def _check_reloading_model(self, ref_input, model):
         # Whole model file
         ref_output = model(ref_input)
-        temp_filepath = os.path.join(self.get_temp_dir(), "model.h5")
-        saved_model_save.save(model, temp_filepath)
+        temp_filepath = os.path.join(self.get_temp_dir(), "model")
+        # model.save(temp_filepath, save_format="tf")
+        # loaded = load_model(temp_filepath)
+        saved_model_save.save(model, temp_filepath, overwrite=True, include_optimizer=True)
         loaded = saved_model_load.load(temp_filepath)
         output = loaded(ref_input)
         self.assertAllClose(ref_output, output, atol=1e-5)
@@ -67,7 +76,7 @@ class SavedModelWholeModelTest(testing.TestCase):
         ref_input = np.random.random((2, 3))
         self._check_reloading_model(ref_input, model)
 
-    def test_functional_model_weights(self):
+    def test_functional_model(self):
         model = get_functional_model(keras_core)
         ref_input = np.random.random((2, 3))
         self._check_reloading_model(ref_input, model)

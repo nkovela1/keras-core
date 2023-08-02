@@ -7,13 +7,13 @@ from absl import logging
 
 from keras_core.layers import Layer
 from keras_core.legacy.saving.saved_model import saved_metadata_pb2
-from keras_core.legacy.saving.saved_model import versions_pb2
+from keras_core.legacy.saving.saved_model import version_pb2
 from keras_core.legacy.saving import saving_utils
 from keras_core.legacy.saving import serialization
 from keras_core.legacy.saving.saved_model import constants
 from keras_core.legacy.saving.saved_model import save_impl
 from keras_core.legacy.saving import saving_options
-from keras.utils.io_utils import ask_to_proceed_with_overwrite
+from keras_core.utils.io_utils import ask_to_proceed_with_overwrite
 
 # isort: off
 from tensorflow.python.saved_model import save as save_lib
@@ -104,7 +104,7 @@ def generate_keras_metadata(saved_nodes, node_paths):
             metadata.nodes.add(
                 node_id=node_id,
                 node_path=node_path,
-                version=versions_pb2.VersionDef(
+                version=version_pb2.VersionDef(
                     producer=2, min_consumer=1, bad_consumers=[]
                 ),
                 identifier=node._object_identifier,
@@ -114,9 +114,8 @@ def generate_keras_metadata(saved_nodes, node_paths):
             # Log warning if the node's class name conflicts with a Keras
             # built-in object.
             class_name = node.__class__.__name__
-            from keras.layers import serialization as layers_serialization
 
-            builtin_layer = layers_serialization.get_builtin_layer(class_name)
+            builtin_layer = saving_utils.get_builtin_layer(class_name)
             if builtin_layer:
                 if not isinstance(node, builtin_layer):
                     logging.warning(

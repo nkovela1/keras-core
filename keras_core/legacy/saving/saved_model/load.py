@@ -10,20 +10,20 @@ import tensorflow as tf
 from keras_core import backend
 from keras_core import regularizers
 from keras_core.layers import input_spec
+from keras_core.layers import InputLayer
 from keras_core.layers.layer import CallSpec
 from keras_core.legacy.saving.saved_model import saved_metadata_pb2
-from keras_core.legacy.saving.saved_model import versions_pb2
+from keras_core.legacy.saving.saved_model import version_pb2
 from keras_core.saving import object_registration
-from keras_core.legacy.saving import model_config
 from keras_core.legacy.saving import saving_utils
 from keras_core.legacy.saving import serialization
 from keras_core.legacy.saving.saved_model import constants
-from keras_core.legacy.saving.saved_model import json_utils
+from keras_core.legacy.saving import json_utils
 from keras_core.legacy.saving.saved_model import utils
 from keras_core.legacy.saving.saved_model.serialized_attributes import (
     CommonEndpoints,
 )
-from keras.utils import metrics_utils
+from keras_core.mixed_precision import deserialize_policy
 import inspect
 
 # TODO(b/134426265): Switch back to single-quotes to match the rest of the file
@@ -32,20 +32,6 @@ import inspect
 from keras_core import models
 from keras_core import layers
 from keras_core import metrics
-
-models_lib = LazyLoader("models_lib", globals(), "keras.models")
-base_layer = LazyLoader("base_layer", globals(), "keras.engine.base_layer")
-layers_module = LazyLoader("layers_module", globals(), "keras.layers")
-input_layer = LazyLoader("input_layer", globals(), "keras.engine.input_layer")
-functional_lib = LazyLoader(
-    "functional_lib", globals(), "keras.engine.functional"
-)
-training_lib = LazyLoader("training_lib", globals(), "keras.engine.training")
-training_lib_v1 = LazyLoader(
-    "training_lib_v1", globals(), "keras.engine.training_v1"
-)
-metrics = LazyLoader("metrics", globals(), "keras.metrics")
-base_rnn = LazyLoader("base_rnn", globals(), "keras.layers.rnn.base_rnn")
 
 
 PUBLIC_ATTRIBUTES = CommonEndpoints.all_functions.union(
@@ -209,7 +195,7 @@ def _read_legacy_metadata(object_graph_def, metadata, path):
             metadata.nodes.add(
                 node_id=node_id,
                 node_path=node_paths[node_id],
-                version=versions_pb2.VersionDef(
+                version=version_pb2.VersionDef(
                     producer=1, min_consumer=1, bad_consumers=[]
                 ),
                 identifier=proto.user_object.identifier,
@@ -240,10 +226,8 @@ def _is_graph_network(layer):
 
     if isinstance(layer, RevivedNetwork):
         return False
-    elif isinstance(layer, models.Functional):
-        return getattr(layer, "_is_graph_network", False) or isinstance(
-            layer, models.Sequential
-        )
+    elif isinstance(layer, models.Functional) or isinstance(layer, models.Sequential):
+        return True
     return False
 
 
@@ -563,7 +547,7 @@ class KerasObjectLoader:
 
         try:
             try:
-                obj = model_config.model_from_config(
+                obj = saving_utils.model_from_config(
                     serialization.serialize_keras_class_and_config(
                         class_name, config, shared_object_id=shared_object_id
                     )
@@ -603,11 +587,11 @@ class KerasObjectLoader:
         if metadata.get("trainable") is not None:
             obj.trainable = metadata["trainable"]
         if metadata.get("dtype") is not None:
-            obj._set_dtype_policy(metadata["dtype"])
+            obj.dtype_policy = deserialize_policy(metadata["dtype"])
         if metadata.get("stateful") is not None:
             obj.stateful = metadata["stateful"]
         if metadata.get("autocast") is not None:
-            obj._autocast = metadata["autocast"]
+            obj.autocast = metadata["autocast"]
         # Restore model save spec for subclassed models. (layers do not store a
         # SaveSpec)
         if isinstance(obj, models.Model):
@@ -694,7 +678,7 @@ class KerasObjectLoader:
 
             self._unblock_model_reconstruction(node_id, node)
 
-            if isinstance(node, layers.InputLayer):
+            if isinstance(node, InputLayer):
                 continue
             elif isinstance(node, metrics.Metric):
                 continue
@@ -757,35 +741,34 @@ class KerasObjectLoader:
             # another object's __init__.
             pass
         elif isinstance(model, models.Sequential):
-            if not layers or not isinstance(layers[0], layers.InputLayer):
+            if not layers or not isinstance(layers[0], InputLayer):
                 if config["layers"][0]["class_name"] == "InputLayer":
                     layers.insert(
                         0,
-                        layers.InputLayer.from_config(
+                        InputLayer.from_config(
                             config["layers"][0]["config"]
                         ),
                     )
-                elif "batch_input_shape" in config["layers"][0]["config"]:
-                    batch_input_shape = config["layers"][0]["config"][
-                        "batch_input_shape"
+                elif "batch_shape" in config["layers"][0]["config"]:
+                    batch_shape = config["layers"][0]["config"][
+                        "batch_shape"
                     ]
                     layers.insert(
                         0,
-                        layers.InputLayer(
-                            input_shape=batch_input_shape[1:],
-                            batch_size=batch_input_shape[0],
+                        InputLayer(
+                            batch_shape=batch_shape,
                             dtype=layers[0].dtype,
                             name=layers[0].name + "_input",
                         ),
                     )
             model.__init__(layers, name=config["name"])
-            if not model.inputs:
+            if not model._functional or not model.inputs:
                 first_layer = self._get_child_layer_node_ids(model_id)[0]
                 input_specs = self._infer_inputs(first_layer)
                 input_shapes = self._infer_inputs(
                     first_layer, convert_to_shapes=True
                 )
-                model._set_inputs(input_specs)
+                model._set_save_spec(input_specs)
                 if not model.built and not isinstance(input_specs, dict):
                     model.build(input_shapes)
         else:  # Reconstruct functional model
@@ -1163,7 +1146,7 @@ class RevivedLayer:
             if metadata.get("input_spec") is not None:
                 revived_obj.input_spec = recursively_deserialize_keras_object(
                     metadata["input_spec"],
-                    module_objects={"InputSpec": layers.InputSpec},
+                    module_objects={"InputSpec": input_spec.InputSpec},
                 )
             if metadata.get("activity_regularizer") is not None:
                 revived_obj.activity_regularizer = regularizers.deserialize(

@@ -11,7 +11,7 @@ from google.protobuf import symbol_database as _symbol_database
 _sym_db = _symbol_database.Default()
 
 
-import version_pb2 as version__pb2
+from keras_core.legacy.saving.saved_model import version_pb2 as version__pb2
 
 
 DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x14saved_metadata.proto\x12$keras_core.legacy.saving.saved_model\x1a\rversion.proto\"Q\n\rSavedMetadata\x12@\n\x05nodes\x18\x01 \x03(\x0b\x32\x31.keras_core.legacy.saving.saved_model.SavedObject\"\xa0\x01\n\x0bSavedObject\x12\x0f\n\x07node_id\x18\x02 \x01(\x05\x12\x11\n\tnode_path\x18\x03 \x01(\t\x12\x12\n\nidentifier\x18\x04 \x01(\t\x12\x10\n\x08metadata\x18\x05 \x01(\t\x12\x41\n\x07version\x18\x06 \x01(\x0b\x32\x30.keras_core.legacy.saving.saved_model.VersionDefJ\x04\x08\x01\x10\x02\x62\x06proto3')

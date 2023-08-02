@@ -17,3 +17,20 @@ def resolve_policy(identifier):
         "Cannot interpret `dtype` argument. Expected a string "
         f"or an instance of DTypePolicy. Received: dtype={identifier}"
     )
+
+
+def serialize_policy(policy):
+    """Serializes `DTypePolicy` instances."""
+    policy = resolve_policy(policy)
+    return serialization_lib.serialize_keras_object(policy)
+
+
+def deserialize_policy(config, custom_objects=None):
+    """Deserializes a config to a `DTypePolicy` instance."""
+    module_objects = {"DTypePolicy": DTypePolicy}
+    policy = serialization_lib.deserialize_keras_object(
+        config,
+        module_objects=module_objects,
+        custom_objects=custom_objects,
+    )
+    return resolve_policy(policy)

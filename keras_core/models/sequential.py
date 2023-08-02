@@ -257,6 +257,7 @@ class Sequential(Model):
     @property
     def _trackable_saved_model_saver(self):
         # TF-specific attribute for compatibility with legacy SavedModel format
+        from keras_core import backend
         if backend.backend() == "tensorflow":
             from keras_core.legacy.saving.saved_model import model_serialization
             return model_serialization.SequentialSavedModelSaver(self)

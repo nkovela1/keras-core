@@ -17,8 +17,7 @@ class ModelSavedModelSaver(layer_serialization.LayerSavedModelSaver):
         metadata = super()._python_properties_internal()
         # Network stateful property is dependent on the child layers.
         metadata.pop("stateful")
-        metadata["is_graph_network"] = self.obj._is_graph_network
-        spec = self.obj.save_spec(dynamic_batch=False)
+        spec = self.obj._get_save_spec(dynamic_batch=False, inputs_only=False)
         metadata["full_save_spec"] = spec
         # save_spec is saved for forward compatibility on older TF versions.
         metadata["save_spec"] = None if spec is None else spec[0][0]

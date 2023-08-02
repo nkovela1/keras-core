@@ -1,6 +1,6 @@
 import tensorflow as tf
 
-from keras_core.mixed_precision import resolve_policy
+from keras_core.mixed_precision import serialize_policy
 from keras_core.legacy.saving import serialization
 from keras_core.legacy.saving.saved_model import base_serialization
 from keras_core.legacy.saving.saved_model import constants
@@ -29,10 +29,10 @@ class LayerSavedModelSaver(base_serialization.SavedModelSaver):
             name=self.obj.name,
             trainable=self.obj.trainable,
             call_has_training_arg=self.obj._call_has_training_arg,
-            dtype=resolve_policy(self.obj.dtype_policy),
+            dtype=serialize_policy(self.obj.dtype_policy),
             batch_shape=getattr(self.obj, "batch_shape", None),
-            stateful=self.obj.stateful,
-            must_restore_from_config=self.obj._must_restore_from_config,
+            stateful=getattr(self.obj, "stateful", None),
+            must_restore_from_config=getattr(self.obj, "_must_restore_from_config", None),
             autocast=self.obj.autocast,
         )
 
@@ -129,9 +129,7 @@ class InputLayerSavedModelSaver(base_serialization.SavedModelSaver):
             class_name=type(self.obj).__name__,
             name=self.obj.name,
             dtype=self.obj.dtype,
-            sparse=self.obj.sparse,
-            ragged=self.obj.ragged,
-            batch_input_shape=self.obj._batch_input_shape,
+            batch_input_shape=self.obj.batch_shape,
             config=self.obj.get_config(),
         )
 
