@@ -121,7 +121,7 @@ def load(path, compile=True, options=None):
     keras_loader.del_tracking()
 
     model = loaded["root"]
-
+    import pdb;pdb.set_trace()
     if isinstance(model, models.Model) and compile:
         # TODO(kathywu): Use compiled objects from SavedModel, instead of
         # creating new objects from the training config.
@@ -714,6 +714,7 @@ class KerasObjectLoader:
             model, layers = self.model_layer_dependencies[model_id]
             self._reconstruct_model(model_id, model, layers)
             _finalize_config_layers([model])
+            # self.loaded_nodes[model_id] = (model, *self.loaded_nodes[model_id][1:])
 
         if all_initialized_models != set(self.model_layer_dependencies.keys()):
             # This should not happen.
@@ -772,10 +773,16 @@ class KerasObjectLoader:
                 if not model.built and not isinstance(input_specs, dict):
                     model.build(input_shapes)
         else:  # Reconstruct functional model
-
-            model = models.Functional._from_config(
+            #import pdb; pdb.set_trace()
+            # serialized_attrs = model._serialized_attributes
+            loaded = models.Functional._from_config(
                 config, created_layers={layer.name: layer for layer in layers}
             )
+            for attr_key in loaded.__dict__.keys():
+                model.__dict__[attr_key] = loaded.__dict__[attr_key]
+            # loaded._serialized_attributes = model._serialized_attributes
+            # model = loaded
+            # import pdb;pdb.set_trace()
             # (
             #     inputs,
             #     outputs,
@@ -791,6 +798,7 @@ class KerasObjectLoader:
 
         # Unblock models that are dependent on this model.
         self._unblock_model_reconstruction(model_id, model)
+        return model
 
     def _get_child_layer_node_ids(self, node_id):
         """Returns the node ids of each layer in a Sequential/Functional
@@ -1326,8 +1334,8 @@ def _set_network_attributes_from_metadata(revived_obj):
 
         metadata = revived_obj._serialized_attributes["metadata"]
         if metadata.get("dtype") is not None:
-            revived_obj._set_dtype_policy(metadata["dtype"])
-        revived_obj._trainable = metadata["trainable"]
+            revived_obj.dtype_policy = deserialize_policy(metadata["dtype"])
+        revived_obj.trainable = metadata["trainable"] # Change from _trainable to trainable
 
 
 def _maybe_add_serialized_attributes(layer, metadata):
