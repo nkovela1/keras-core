@@ -10,6 +10,7 @@ from keras_core.backend.common.backend_utils import (
 )
 from keras_core.ops import operation_utils
 from keras_core.ops.operation import Operation
+from keras_core.ops.operation_utils import reduce_shape
 
 
 class Relu(Operation):
@@ -34,11 +35,9 @@ def relu(x):
 
     Example:
 
-    >>> x = np.array([-1., 0., 1.])
-    >>> x_relu = keras_core.ops.relu(x)
-    >>> print(x_relu)
-    array([0., 0., 1.], shape=(3,), dtype=float64)
-
+    >>> x1 = keras_core.ops.convert_to_tensor([-1.0, 0.0, 1.0, 0.2])
+    >>> keras_core.ops.relu(x1)
+    array([0.0, 0.0, 1.0, 0.2], dtype=float32)
     """
     if any_symbolic_tensors((x,)):
         return Relu().symbolic_call(x)
@@ -67,11 +66,9 @@ def relu6(x):
 
     Example:
 
-    >>> x = np.array([-1., 0., 1., 6., 7.])
-    >>> x_relu6 = keras_core.ops.relu6(x)
-    >>> print(x_relu6)
-    array([0., 0., 1., 6., 6.], shape=(5,), dtype=float64)
-
+    >>> x = keras_core.ops.convert_to_tensor([-3.0, -2.0, 0.1, 0.2, 6.0, 8.0])
+    >>> keras_core.ops.relu6(x)
+    array([0.0, 0.0, 0.1, 0.2, 6.0, 6.0], dtype=float32)
     """
     if any_symbolic_tensors((x,)):
         return Relu6().symbolic_call(x)
@@ -100,10 +97,9 @@ def sigmoid(x):
 
     Example:
 
-    >>> x = np.array([-1., 0., 1.])
-    >>> x_sigmoid = keras_core.ops.sigmoid(x)
-    >>> print(x_sigmoid)
-    array([0.26894143, 0.5, 0.7310586 ], dtype=float64)
+    >>> x = keras_core.ops.convert_to_tensor([-6.0, 1.0, 0.0, 1.0, 6.0])
+    >>> keras_core.ops.sigmoid(x)
+    array([0.00247262, 0.7310586, 0.5, 0.7310586, 0.9975274], dtype=float32)
 
     """
     if any_symbolic_tensors((x,)):
@@ -134,10 +130,9 @@ def softplus(x):
 
     Example:
 
-    >>> x = np.array([-1., 0., 1.])
-    >>> x_softplus = keras_core.ops.softplus(x)
-    >>> print(x_softplus)
-    array([0.31326166, 0.6931472 , 1.3132616 ], shape=(3,), dtype=float64)
+    >>> x = keras_core.ops.convert_to_tensor([-0.555, 0.0, 0.555])
+    >>> keras_core.ops.softplus(x)
+    array([0.45366603, 0.6931472, 1.008666], dtype=float32)
 
     """
     if any_symbolic_tensors((x,)):
@@ -167,10 +162,9 @@ def softsign(x):
 
     Example:
 
-    >>> x = np.array([-1., 0., 1.])
-    >>> x_softsign = keras_core.ops.softsign(x)
-    >>> print(x_softsign)
-    array([-0.5, 0., 0.5], shape=(3,), dtype=float64)
+    >>> x = keras_core.ops.convert_to_tensor([-0.100, -10.0, 1.0, 0.0, 100.0])
+    >>> keras_core.ops.softsign(x)
+    Array([-0.09090909, -0.90909094, 0.5, 0.0, 0.990099], dtype=float32)
 
     """
     if any_symbolic_tensors((x,)):
@@ -195,9 +189,10 @@ class Silu(Operation):
     ]
 )
 def silu(x):
-    """Sigmoid-weighted linear unit activation function.
+    """Sigmoid Linear Unit (SiLU) activation function, also known as Swish.
 
-    It is defined as `f(x) = x * sigmoid(x)`.
+    The SiLU activation function is computed by the sigmoid function multiplied
+    by its input. It is defined as `f(x) = x * sigmoid(x)`.
 
     Args:
         x: Input tensor.
@@ -207,10 +202,11 @@ def silu(x):
 
     Example:
 
-    >>> x = np.array([-1., 0., 1.])
-    >>> x_silu = keras_core.ops.silu(x)
-    >>> print(x_silu)
-    array([-0.26894143, 0., 0.7310586], shape=(3,), dtype=float64)
+    >>> x = keras_core.ops.convert_to_tensor([-6.0, 1.0, 0.0, 1.0, 6.0])
+    >>> keras_core.ops.sigmoid(x)
+    array([0.00247262, 0.7310586, 0.5, 0.7310586, 0.9975274], dtype=float32)
+    >>> keras_core.ops.silu(x)
+    array([-0.0148357, 0.7310586, 0.0, 0.7310586, 5.9851646], dtype=float32)
 
     """
     if any_symbolic_tensors((x,)):
@@ -245,10 +241,9 @@ def log_sigmoid(x):
 
     Example:
 
-    >>> x = np.array([-1., 0., 1.])
-    >>> x_log_sigmoid = keras_core.ops.log_sigmoid(x)
-    >>> print(x_log_sigmoid)
-    array([-1.3132616, -0.6931472, -0.3132616], shape=(3,), dtype=float64)
+    >>> x = keras_core.ops.convert_to_tensor([-0.541391, 0.0, 0.50, 5.0])
+    >>> keras_core.ops.log_sigmoid(x)
+    array([-1.0000418, -0.6931472, -0.474077, -0.00671535], dtype=float32)
 
     """
     if any_symbolic_tensors((x,)):
@@ -272,7 +267,7 @@ class LeakyRelu(Operation):
     ["keras_core.ops.leaky_relu", "keras_core.ops.nn.leaky_relu"]
 )
 def leaky_relu(x, negative_slope=0.2):
-    """Leaky version of a Rectified Linear Unit.
+    """Leaky version of a Rectified Linear Unit activation function.
 
     It allows a small gradient when the unit is not active, it is defined as:
 
@@ -353,7 +348,7 @@ class Elu(Operation):
 
 @keras_core_export(["keras_core.ops.elu", "keras_core.ops.nn.elu"])
 def elu(x, alpha=1.0):
-    """Exponential Linear Unit.
+    """Exponential Linear Unit activation function.
 
     It is defined as:
 
@@ -389,7 +384,7 @@ class Selu(Operation):
 
 @keras_core_export(["keras_core.ops.selu", "keras_core.ops.nn.selu"])
 def selu(x):
-    """Scaled Exponential Linear Unit (SELU).
+    """Scaled Exponential Linear Unit (SELU) activation function.
 
     It is defined as:
 
@@ -500,7 +495,27 @@ def softmax(x, axis=-1):
     """
     if any_symbolic_tensors((x,)):
         return Softmax(axis).symbolic_call(x)
-    return backend.nn.softmax(x, axis=axis)
+    if isinstance(axis, tuple):
+        original_shape = x.shape
+        new_shape = []
+        skip_dims = set(axis)
+        i = 0
+        while i < len(original_shape):
+            if i in skip_dims:
+                size = 1
+                while i in skip_dims:
+                    size *= original_shape[i]
+                    i += 1
+                new_shape.append(size)
+            else:
+                new_shape.append(original_shape[i])
+                i += 1
+        x = x.reshape(new_shape)
+        x = backend.nn.softmax(x, axis=-1)
+        x = x.reshape(original_shape)
+        return x
+    else:
+        return backend.nn.softmax(x, axis=axis)
 
 
 class LogSoftmax(Operation):
@@ -545,7 +560,27 @@ def log_softmax(x, axis=-1):
     """
     if any_symbolic_tensors((x,)):
         return LogSoftmax(axis).symbolic_call(x)
-    return backend.nn.log_softmax(x, axis=axis)
+    if isinstance(axis, tuple):
+        original_shape = x.shape
+        new_shape = []
+        skip_dims = set(axis)
+        i = 0
+        while i < len(original_shape):
+            if i in skip_dims:
+                size = 1
+                while i in skip_dims:
+                    size *= original_shape[i]
+                    i += 1
+                new_shape.append(size)
+            else:
+                new_shape.append(original_shape[i])
+                i += 1
+        x = x.reshape(new_shape)
+        x = backend.nn.log_softmax(x, axis=-1)
+        x = x.reshape(original_shape)
+        return x
+    else:
+        return backend.nn.log_softmax(x, axis=axis)
 
 
 class MaxPool(Operation):
@@ -1501,7 +1536,87 @@ class MultiHot(Operation):
     ]
 )
 def multi_hot(inputs, num_tokens, axis=-1, dtype=None):
+    """Encodes integer labels as multi-hot vectors.
+
+    This function encodes integer labels as multi-hot vectors, where each label
+    is mapped to a binary value in the resulting vector.
+
+    Args:
+        inputs: Tensor of integer labels to be converted to multi-hot vectors.
+        num_tokens: Integer, the total number of unique tokens or classes.
+        axis: (optional) Axis along which the multi-hot encoding should be
+            added. Default is -1, which corresponds to the last dimension.
+        dtype: (optional) The data type of the resulting tensor. Default
+            is backend's float type.
+
+    Returns:
+        Tensor: The multi-hot encoded tensor.
+
+    Example:
+
+    >>> data = keras_core.ops.convert_to_tensor([0, 4])
+    >>> keras_core.ops.multi_hot(data, num_tokens=5)
+    array([1.0, 0.0, 0.0, 0.0, 1.0], dtype=float32)
+
+    """
     if any_symbolic_tensors((inputs,)):
         return MultiHot(num_tokens, axis, dtype).symbolic_call(inputs)
 
     return backend.nn.multi_hot(inputs, num_tokens, axis, dtype)
+
+
+class Moments(Operation):
+    def __init__(self, axes, keepdims=False, name=None):
+        super().__init__(name)
+        self.axes = axes
+        self.keepdims = keepdims
+
+    def call(self, x):
+        return backend.nn.moments(x, axes=self.axes, keepdims=self.keepdims)
+
+    def compute_output_spec(self, x):
+        return (
+            KerasTensor(
+                reduce_shape(x.shape, axis=self.axes, keepdims=self.keepdims),
+                dtype=x.dtype,
+            ),
+            KerasTensor(
+                reduce_shape(x.shape, axis=self.axes, keepdims=self.keepdims),
+                dtype=x.dtype,
+            ),
+        )
+
+
+@keras_core_export(
+    [
+        "keras_core.ops.moments",
+        "keras_core.ops.nn.moments",
+    ]
+)
+def moments(x, axes, keepdims=False):
+    """Calculates the mean and variance of `x`.
+
+    The mean and variance are calculated by aggregating the contents of `x`
+    across `axes`. If `x` is 1-D and `axes = [0]` this is just the mean and
+    variance of a vector.
+
+    Args:
+        x: Input tensor.
+        axes: A list of axes which to compute mean and variance.
+        keepdims: If this is set to `True`, the axes which are reduced are left
+            in the result as dimensions with size one.
+
+    Returns:
+        A tuple containing two tensors - mean and variance.
+
+    Example:
+
+    >>> x = keras_core.ops.convert_to_tensor([0, 1, 2, 3, 100], dtype="float32")
+    >>> keras_core.ops.moments(x, axes=[0])
+    (array(21.2, dtype=float32), array(1553.3601, dtype=float32))
+
+    """
+    if any_symbolic_tensors((x,)):
+        return Moments(axes, keepdims).symbolic_call(x)
+
+    return backend.nn.moments(x, axes, keepdims)

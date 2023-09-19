@@ -1,4 +1,6 @@
 import numpy as np
+import pytest
+from absl.testing import parameterized
 from tensorflow.python.ops.numpy_ops import np_config
 
 from keras_core import backend
@@ -246,6 +248,7 @@ class NumpyTwoInputOpsDynamicShapeTest(testing.TestCase):
         x = KerasTensor([None, 1])
         y = KerasTensor([None, 3])
         self.assertEqual(knp.where(condition, x, y).shape, (2, None, 3))
+        self.assertEqual(knp.where(condition).shape, (2, None, 1))
 
     def test_floordiv(self):
         x = KerasTensor((None, 3))
@@ -256,6 +259,105 @@ class NumpyTwoInputOpsDynamicShapeTest(testing.TestCase):
         x = KerasTensor((None, 3))
         y = KerasTensor((2, None))
         self.assertEqual(knp.logical_xor(x, y).shape, (2, 3))
+
+    def test_shape_equal_basic_equality(self):
+        x = KerasTensor([3, 4]).shape
+        y = KerasTensor([3, 4]).shape
+        self.assertTrue(knp.shape_equal(x, y))
+        y = KerasTensor([3, 5]).shape
+        self.assertFalse(knp.shape_equal(x, y))
+
+    def test_shape_equal_allow_none(self):
+        x = KerasTensor([3, 4, None]).shape
+        y = KerasTensor([3, 4, 5]).shape
+        self.assertTrue(knp.shape_equal(x, y, allow_none=True))
+        self.assertFalse(knp.shape_equal(x, y, allow_none=False))
+
+    def test_shape_equal_different_shape_lengths(self):
+        x = KerasTensor([3, 4]).shape
+        y = KerasTensor([3, 4, 5]).shape
+        self.assertFalse(knp.shape_equal(x, y))
+
+    def test_shape_equal_ignore_axes(self):
+        x = KerasTensor([3, 4, 5]).shape
+        y = KerasTensor([3, 6, 5]).shape
+        self.assertTrue(knp.shape_equal(x, y, axis=1))
+        y = KerasTensor([3, 6, 7]).shape
+        self.assertTrue(knp.shape_equal(x, y, axis=(1, 2)))
+        self.assertFalse(knp.shape_equal(x, y, axis=1))
+
+    def test_shape_equal_only_none(self):
+        x = KerasTensor([None, None]).shape
+        y = KerasTensor([5, 6]).shape
+        self.assertTrue(knp.shape_equal(x, y, allow_none=True))
+
+    def test_shape_equal_axis_as_list(self):
+        x = KerasTensor([3, 4, 5]).shape
+        y = KerasTensor([3, 6, 5]).shape
+        self.assertTrue(knp.shape_equal(x, y, axis=[1]))
+
+    def test_shape_non_equal_with_negative_axis(self):
+        x = KerasTensor([3, 4, 5]).shape
+        y = KerasTensor([3, 4, 6]).shape
+        self.assertFalse(knp.shape_equal(x, y, axis=-2))
+
+    def test_shape_equal_with_negative_axis(self):
+        x = KerasTensor([3, 4, 5]).shape
+        y = KerasTensor([3, 4, 5]).shape
+        self.assertTrue(knp.shape_equal(x, y, axis=-1))
+
+    def test_shape_equal_zeros(self):
+        x = KerasTensor([0, 4]).shape
+        y = KerasTensor([0, 4]).shape
+        self.assertTrue(knp.shape_equal(x, y))
+        y = KerasTensor([0, 5]).shape
+        self.assertFalse(knp.shape_equal(x, y))
+
+    def test_broadcast_shapes_conversion_to_list(self):
+        shape1 = KerasTensor([1, 2]).shape
+        shape2 = KerasTensor([3, 1]).shape
+        expected_output = [3, 2]
+        self.assertEqual(knp.broadcast_shapes(shape1, shape2), expected_output)
+
+    def test_broadcast_shapes_shape1_longer_than_shape2(self):
+        shape1 = KerasTensor([5, 3, 2]).shape
+        shape2 = KerasTensor([1, 3]).shape
+        with self.assertRaisesRegex(ValueError, "Cannot broadcast shape"):
+            knp.broadcast_shapes(shape1, shape2)
+
+    def test_broadcast_shapes_shape2_longer_than_shape1(self):
+        shape1 = KerasTensor([5, 3]).shape
+        shape2 = KerasTensor([2, 5, 3]).shape
+        expected_output = [2, 5, 3]
+        self.assertEqual(knp.broadcast_shapes(shape1, shape2), expected_output)
+
+    def test_broadcast_shapes_broadcasting_shape1_is_1(self):
+        shape1 = KerasTensor([1, 3]).shape
+        shape2 = KerasTensor([5, 1]).shape
+        expected_output = [5, 3]
+        self.assertEqual(knp.broadcast_shapes(shape1, shape2), expected_output)
+
+    def test_broadcast_shapes_broadcasting_shape1_is_none(self):
+        shape1 = KerasTensor([None, 3]).shape
+        shape2 = KerasTensor([5, 1]).shape
+        expected_output = [5, 3]
+        self.assertEqual(knp.broadcast_shapes(shape1, shape2), expected_output)
+
+        shape1 = KerasTensor([None, 3]).shape
+        shape2 = KerasTensor([5, 3]).shape
+        expected_output = [5, 3]
+        self.assertEqual(knp.broadcast_shapes(shape1, shape2), expected_output)
+
+    def test_broadcast_shapes_broadcasting_shape2_conditions(self):
+        shape1 = KerasTensor([5, 3, 2]).shape
+        shape2 = KerasTensor([1, 3, 2]).shape
+        expected_output = [5, 3, 2]
+        self.assertEqual(knp.broadcast_shapes(shape1, shape2), expected_output)
+
+        shape1 = KerasTensor([5, 3, 2]).shape
+        shape2 = KerasTensor([1, None, 2]).shape
+        expected_output = [5, 3, 2]
+        self.assertEqual(knp.broadcast_shapes(shape1, shape2), expected_output)
 
 
 class NumpyTwoInputOpsStaticShapeTest(testing.TestCase):
@@ -640,6 +742,7 @@ class NumpyTwoInputOpsStaticShapeTest(testing.TestCase):
         x = KerasTensor([2, 3])
         y = KerasTensor([2, 3])
         self.assertEqual(knp.where(condition, x, y).shape, (2, 3))
+        self.assertAllEqual(knp.where(condition).shape, (2, 3))
 
     def test_floordiv(self):
         x = KerasTensor((2, 3))
@@ -1141,7 +1244,10 @@ class NumpyOneInputOpsDynamicShapeTest(testing.TestCase):
         x = KerasTensor([None, 3, 3])
         self.assertEqual(knp.split(x, 2)[0].shape, (None, 3, 3))
         self.assertEqual(knp.split(x, 3, axis=1)[0].shape, (None, 1, 3))
+        self.assertEqual(len(knp.split(x, [1, 3], axis=1)), 3)
+        self.assertEqual(knp.split(x, [1, 3], axis=1)[0].shape, (None, 1, 3))
         self.assertEqual(knp.split(x, [1, 3], axis=1)[1].shape, (None, 2, 3))
+        self.assertEqual(knp.split(x, [1, 3], axis=1)[2].shape, (None, 0, 3))
 
     def test_sqrt(self):
         x = KerasTensor([None, 3])
@@ -1258,6 +1364,12 @@ class NumpyOneInputOpsStaticShapeTest(testing.TestCase):
     def test_transpose(self):
         x = KerasTensor([2, 3])
         self.assertEqual(knp.transpose(x).shape, (3, 2))
+
+    def test_transpose_sparse(self):
+        x = KerasTensor([2, 3], sparse=True)
+        result = knp.transpose(x)
+        self.assertEqual(result.shape, (3, 2))
+        self.assertTrue(result.sparse)
 
     def test_arccos(self):
         x = KerasTensor([2, 3])
@@ -1566,6 +1678,25 @@ class NumpyOneInputOpsStaticShapeTest(testing.TestCase):
         self.assertEqual(knp.reshape(x, (6,)).shape, (6,))
         self.assertEqual(knp.reshape(x, (-1,)).shape, (6,))
 
+    def test_reshape_sparse(self):
+        x = KerasTensor([2, 3], sparse=True)
+
+        result = knp.reshape(x, (3, 2))
+        self.assertEqual(result.shape, (3, 2))
+        self.assertTrue(result.sparse)
+
+        result = knp.reshape(x, (3, -1))
+        self.assertEqual(result.shape, (3, 2))
+        self.assertTrue(result.sparse)
+
+        result = knp.reshape(x, (6,))
+        self.assertEqual(result.shape, (6,))
+        self.assertTrue(result.sparse)
+
+        result = knp.reshape(x, (-1,))
+        self.assertEqual(result.shape, (6,))
+        self.assertTrue(result.sparse)
+
     def test_roll(self):
         x = KerasTensor([2, 3])
         self.assertEqual(knp.roll(x, 1).shape, (2, 3))
@@ -1603,7 +1734,10 @@ class NumpyOneInputOpsStaticShapeTest(testing.TestCase):
         self.assertEqual(len(knp.split(x, 2)), 2)
         self.assertEqual(knp.split(x, 2)[0].shape, (1, 3))
         self.assertEqual(knp.split(x, 3, axis=1)[0].shape, (2, 1))
+        self.assertEqual(len(knp.split(x, [1, 3], axis=1)), 3)
+        self.assertEqual(knp.split(x, [1, 3], axis=1)[0].shape, (2, 1))
         self.assertEqual(knp.split(x, [1, 3], axis=1)[1].shape, (2, 2))
+        self.assertEqual(knp.split(x, [1, 3], axis=1)[2].shape, (2, 0))
 
         with self.assertRaises(ValueError):
             knp.split(x, 2, axis=1)
@@ -1668,7 +1802,7 @@ class NumpyOneInputOpsStaticShapeTest(testing.TestCase):
         self.assertEqual(knp.vstack([x, y]).shape, (4, 3))
 
 
-class NumpyTwoInputOpsCorretnessTest(testing.TestCase):
+class NumpyTwoInputOpsCorretnessTest(testing.TestCase, parameterized.TestCase):
     def test_add(self):
         x = np.array([[1, 2, 3], [3, 2, 1]])
         y = np.array([[4, 5, 6], [3, 2, 1]])
@@ -1708,6 +1842,31 @@ class NumpyTwoInputOpsCorretnessTest(testing.TestCase):
 
         self.assertAllClose(knp.Matmul()(x, y), np.matmul(x, y))
         self.assertAllClose(knp.Matmul()(x, z), np.matmul(x, z))
+
+    @parameterized.parameters(
+        ("float16",),
+        ("float32",),
+        ("float64",),
+        ("uint8",),
+        ("int8",),
+        ("int16",),
+        ("int32",),
+    )
+    @pytest.mark.skipif(
+        not backend.SUPPORTS_SPARSE_TENSORS,
+        reason="Backend does not support sparse tensors.",
+    )
+    def test_matmul_sparse(self, dtype):
+        import tensorflow as tf
+
+        rng = np.random.default_rng(0)
+        x1 = 4 * rng.standard_normal((5, 3))
+        x1 = tf.sparse.from_dense(tf.cast(tf.nn.dropout(x1, 0.7), dtype=dtype))
+        x2 = (4 * rng.standard_normal((3, 4))).astype(dtype)
+        self.assertAllClose(
+            knp.matmul(x1, x2),
+            np.matmul(tf.sparse.to_dense(x1).numpy(), x2),
+        )
 
     def test_power(self):
         x = np.array([[1, 2, 3], [3, 2, 1]])
@@ -2098,6 +2257,35 @@ class NumpyTwoInputOpsCorretnessTest(testing.TestCase):
             np.take(x, indices, axis=-2),
         )
 
+    @parameterized.product(
+        dtype=[
+            "float16",
+            "float32",
+            "float64",
+            "uint8",
+            "int8",
+            "int16",
+            "int32",
+        ],
+        axis=[None, 0, 1, -1],
+    )
+    @pytest.mark.skipif(
+        not backend.SUPPORTS_SPARSE_TENSORS,
+        reason="Backend does not support sparse tensors.",
+    )
+    def test_take_sparse(self, dtype, axis):
+        import tensorflow as tf
+
+        rng = np.random.default_rng(0)
+        x = (4 * rng.standard_normal((3, 4, 5))).astype(dtype)
+        indices = tf.SparseTensor(
+            indices=[[0, 0], [1, 2]], values=[1, 2], dense_shape=(2, 3)
+        )
+        self.assertAllClose(
+            knp.take(x, indices, axis=axis),
+            np.take(x, tf.sparse.to_dense(indices).numpy(), axis=axis),
+        )
+
     def test_take_along_axis(self):
         x = np.arange(24).reshape([1, 2, 3, 4])
         indices = np.ones([1, 4, 1, 1], dtype=np.int32)
@@ -2151,6 +2339,8 @@ class NumpyTwoInputOpsCorretnessTest(testing.TestCase):
         y = np.array([4, 5, 6])
         self.assertAllClose(knp.where(x > 1, x, y), np.where(x > 1, x, y))
         self.assertAllClose(knp.Where()(x > 1, x, y), np.where(x > 1, x, y))
+        self.assertAllClose(knp.where(x > 1), np.where(x > 1))
+        self.assertAllClose(knp.Where()(x > 1), np.where(x > 1))
 
     def test_digitize(self):
         x = np.array([0.0, 1.0, 3.0, 1.6])
@@ -2187,7 +2377,7 @@ class NumpyTwoInputOpsCorretnessTest(testing.TestCase):
         )
 
 
-class NumpyOneInputOpsCorrectnessTest(testing.TestCase):
+class NumpyOneInputOpsCorrectnessTest(testing.TestCase, parameterized.TestCase):
     def test_mean(self):
         x = np.array([[1, 2, 3], [3, 2, 1]])
         self.assertAllClose(knp.mean(x), np.mean(x))
@@ -2358,6 +2548,40 @@ class NumpyOneInputOpsCorrectnessTest(testing.TestCase):
         self.assertAllClose(
             knp.Transpose(axes=(1, 0, 3, 2, 4))(x),
             np.transpose(x, axes=(1, 0, 3, 2, 4)),
+        )
+
+    @pytest.mark.skipif(
+        not backend.SUPPORTS_SPARSE_TENSORS,
+        reason="Backend does not support sparse tensors.",
+    )
+    def test_transpose_sparse(self):
+        import tensorflow as tf
+
+        x = tf.SparseTensor(
+            indices=[[0, 0, 0, 0, 0], [0, 1, 2, 3, 4]],
+            values=[1, 2],
+            dense_shape=(1, 2, 3, 4, 5),
+        )
+        x_np = tf.sparse.to_dense(x).numpy()
+
+        self.assertIsInstance(knp.transpose(x), tf.SparseTensor)
+        self.assertAllClose(knp.transpose(x), np.transpose(x_np))
+        self.assertIsInstance(
+            knp.transpose(x, axes=(1, 0, 3, 2, 4)), tf.SparseTensor
+        )
+        self.assertAllClose(
+            knp.transpose(x, axes=(1, 0, 3, 2, 4)),
+            np.transpose(x_np, axes=(1, 0, 3, 2, 4)),
+        )
+
+        self.assertIsInstance(knp.Transpose()(x), tf.SparseTensor)
+        self.assertAllClose(knp.Transpose()(x), np.transpose(x_np))
+        self.assertIsInstance(
+            knp.Transpose(axes=(1, 0, 3, 2, 4))(x), tf.SparseTensor
+        )
+        self.assertAllClose(
+            knp.Transpose(axes=(1, 0, 3, 2, 4))(x),
+            np.transpose(x_np, axes=(1, 0, 3, 2, 4)),
         )
 
     def test_arccos(self):
@@ -2897,52 +3121,52 @@ class NumpyOneInputOpsCorrectnessTest(testing.TestCase):
         self.assertAllClose(knp.ones_like(x), np.ones_like(x))
         self.assertAllClose(knp.OnesLike()(x), np.ones_like(x))
 
-    def test_pad(self):
-        x = np.array([[1, 2], [3, 4]])
+    @parameterized.product(
+        dtype=[
+            "float16",
+            "float32",
+            "float64",
+            "uint8",
+            "int8",
+            "int16",
+            "int32",
+        ],
+        mode=["constant", "reflect", "symmetric"],
+    )
+    def test_pad(self, dtype, mode):
+        # 2D
+        x = np.ones([2, 3], dtype=dtype)
+        pad_width = ((1, 1), (1, 1))
         self.assertAllClose(
-            knp.pad(x, ((1, 1), (1, 1))),
-            np.pad(x, ((1, 1), (1, 1))),
+            knp.pad(x, pad_width, mode=mode), np.pad(x, pad_width, mode=mode)
         )
         self.assertAllClose(
-            knp.pad(x, ((1, 1), (1, 1))),
-            np.pad(x, ((1, 1), (1, 1))),
-        )
-
-        self.assertAllClose(
-            knp.Pad(((1, 1), (1, 1)))(x),
-            np.pad(x, ((1, 1), (1, 1))),
-        )
-        self.assertAllClose(
-            knp.Pad(((1, 1), (1, 1)))(x),
-            np.pad(x, ((1, 1), (1, 1))),
-        )
-
-        self.assertAllClose(
-            knp.pad(x, ((1, 1), (1, 1)), mode="reflect"),
-            np.pad(x, ((1, 1), (1, 1)), mode="reflect"),
-        )
-        self.assertAllClose(
-            knp.pad(x, ((1, 1), (1, 1)), mode="symmetric"),
-            np.pad(x, ((1, 1), (1, 1)), mode="symmetric"),
+            knp.Pad(pad_width, mode=mode)(x), np.pad(x, pad_width, mode=mode)
         )
 
+        # 5D (pad last 3D)
+        x = np.ones([2, 3, 4, 5, 6], dtype=dtype)
+        pad_width = ((0, 0), (0, 0), (2, 3), (1, 1), (1, 1))
         self.assertAllClose(
-            knp.Pad(((1, 1), (1, 1)), mode="reflect")(x),
-            np.pad(x, ((1, 1), (1, 1)), mode="reflect"),
+            knp.pad(x, pad_width, mode=mode), np.pad(x, pad_width, mode=mode)
         )
         self.assertAllClose(
-            knp.Pad(((1, 1), (1, 1)), mode="symmetric")(x),
-            np.pad(x, ((1, 1), (1, 1)), mode="symmetric"),
+            knp.Pad(pad_width, mode=mode)(x), np.pad(x, pad_width, mode=mode)
         )
 
-        x = np.ones([2, 3, 4, 5])
+        # 5D (pad arbitrary dimensions)
+        if backend.backend() == "torch" and mode != "constant":
+            self.skipTest(
+                "reflect and symmetric padding for arbitary dimensions are not "
+                "supported by torch"
+            )
+        x = np.ones([2, 3, 4, 5, 6], dtype=dtype)
+        pad_width = ((1, 1), (2, 1), (3, 2), (4, 3), (5, 4))
         self.assertAllClose(
-            knp.pad(x, ((2, 3), (1, 1), (1, 1), (1, 1))),
-            np.pad(x, ((2, 3), (1, 1), (1, 1), (1, 1))),
+            knp.pad(x, pad_width, mode=mode), np.pad(x, pad_width, mode=mode)
         )
         self.assertAllClose(
-            knp.Pad(((2, 3), (1, 1), (1, 1), (1, 1)))(x),
-            np.pad(x, ((2, 3), (1, 1), (1, 1), (1, 1))),
+            knp.Pad(pad_width, mode=mode)(x), np.pad(x, pad_width, mode=mode)
         )
 
     def test_prod(self):
@@ -2998,6 +3222,24 @@ class NumpyOneInputOpsCorrectnessTest(testing.TestCase):
         self.assertAllClose(knp.reshape(x, [3, 2]), np.reshape(x, [3, 2]))
         self.assertAllClose(knp.Reshape([3, 2])(x), np.reshape(x, [3, 2]))
 
+    @pytest.mark.skipif(
+        not backend.SUPPORTS_SPARSE_TENSORS,
+        reason="Backend does not support sparse tensors.",
+    )
+    def test_reshape_sparse(self):
+        import tensorflow as tf
+
+        x = tf.SparseTensor(
+            indices=[[0, 0], [1, 2]],
+            values=[1, 2],
+            dense_shape=(2, 3),
+        )
+        x_np = tf.sparse.to_dense(x).numpy()
+        self.assertIsInstance(knp.reshape(x, [3, 2]), tf.SparseTensor)
+        self.assertAllClose(knp.reshape(x, [3, 2]), np.reshape(x_np, [3, 2]))
+        self.assertIsInstance(knp.Reshape([3, 2])(x), tf.SparseTensor)
+        self.assertAllClose(knp.Reshape([3, 2])(x), np.reshape(x_np, [3, 2]))
+
     def test_roll(self):
         x = np.array([[1, 2, 3], [3, 2, 1]])
         self.assertAllClose(knp.roll(x, 1), np.roll(x, 1))
@@ -3041,40 +3283,25 @@ class NumpyOneInputOpsCorrectnessTest(testing.TestCase):
 
     def test_split(self):
         x = np.array([[1, 2, 3], [3, 2, 1]])
-        if backend.backend() == "torch":
-            self.assertAllClose(
-                [backend.convert_to_numpy(t) for t in knp.split(x, 2)],
-                np.split(x, 2),
-            )
-            self.assertAllClose(
-                [backend.convert_to_numpy(t) for t in knp.Split(2)(x)],
-                np.split(x, 2),
-            )
-            self.assertAllClose(
-                [
-                    backend.convert_to_numpy(t)
-                    for t in knp.split(x, [1, 2], axis=1)
-                ],
-                np.split(x, [1, 2], axis=1),
-            )
-            self.assertAllClose(
-                [
-                    backend.convert_to_numpy(t)
-                    for t in knp.Split([1, 2], axis=1)(x)
-                ],
-                np.split(x, [1, 2], axis=1),
-            )
-        else:
-            self.assertAllClose(knp.split(x, 2), np.split(x, 2))
-            self.assertAllClose(knp.Split(2)(x), np.split(x, 2))
-            self.assertAllClose(
-                knp.split(x, [1, 2], axis=1),
-                np.split(x, [1, 2], axis=1),
-            )
-            self.assertAllClose(
-                knp.Split([1, 2], axis=1)(x),
-                np.split(x, [1, 2], axis=1),
-            )
+        self.assertAllClose(knp.split(x, 2), np.split(x, 2))
+        self.assertAllClose(knp.Split(2)(x), np.split(x, 2))
+        self.assertAllClose(
+            knp.split(x, [1, 2], axis=1),
+            np.split(x, [1, 2], axis=1),
+        )
+        self.assertAllClose(
+            knp.Split([1, 2], axis=1)(x),
+            np.split(x, [1, 2], axis=1),
+        )
+
+        # test invalid indices_or_sections
+        with self.assertRaises(Exception):
+            knp.split(x, 3)
+
+        # test zero dimension
+        x = np.ones(shape=(0,))
+        self.assertEqual(len(knp.split(x, 2)), 2)
+        self.assertEqual(len(knp.Split(2)(x)), 2)
 
     def test_sqrt(self):
         x = np.array([[1, 4, 9], [16, 25, 36]])

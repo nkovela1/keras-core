@@ -1,6 +1,6 @@
 import numpy as np
 import pytest
-import tensorflow as tf
+from tensorflow import data as tf_data
 
 from keras_core import backend
 from keras_core import layers
@@ -9,6 +9,8 @@ from keras_core import testing
 
 
 class TextVectorizationTest(testing.TestCase):
+    # TODO: increase coverage. Most features aren't being tested.
+
     def test_config(self):
         layer = layers.TextVectorization(
             output_mode="int",
@@ -69,7 +71,7 @@ class TextVectorizationTest(testing.TestCase):
             vocabulary=["baz", "bar", "foo"],
         )
         input_data = [["foo qux bar"], ["qux baz"]]
-        ds = tf.data.Dataset.from_tensor_slices(input_data).batch(2).map(layer)
+        ds = tf_data.Dataset.from_tensor_slices(input_data).batch(2).map(layer)
         for output in ds.take(1):
             output = output.numpy()
         self.assertAllClose(output, np.array([[4, 1, 3, 0], [1, 2, 0, 0]]))
@@ -81,7 +83,7 @@ class TextVectorizationTest(testing.TestCase):
             output_sequence_length=max_len,
         )
         layer.adapt(input_data)
-        ds = tf.data.Dataset.from_tensor_slices(input_data).batch(2).map(layer)
+        ds = tf_data.Dataset.from_tensor_slices(input_data).batch(2).map(layer)
         for output in ds.take(1):
             output.numpy()
 
@@ -101,4 +103,4 @@ class TextVectorizationTest(testing.TestCase):
                 layers.Embedding(5, 4),
             ]
         )
-        model(tf.convert_to_tensor([["foo qux bar"], ["qux baz"]]))
+        model(backend.convert_to_tensor([["foo qux bar"], ["qux baz"]]))

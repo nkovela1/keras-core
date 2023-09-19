@@ -12,6 +12,7 @@ from keras_core import ops
 from keras_core import optimizers
 from keras_core import testing
 from keras_core.callbacks.callback import Callback
+from keras_core.optimizers.rmsprop import RMSprop
 
 if backend.backend() == "jax":
     from keras_core.backend.jax.trainer import JAXTrainer as Trainer
@@ -28,7 +29,7 @@ else:
 
 
 # A model is just a layer mixed in with a Trainer.
-class ExampleModel(layers.Dense, Trainer):
+class ExampleModel(Trainer, layers.Dense):
     def __init__(self, units):
         layers.Dense.__init__(
             self,
@@ -39,7 +40,7 @@ class ExampleModel(layers.Dense, Trainer):
         Trainer.__init__(self)
 
 
-class StructModel(layers.Layer, Trainer):
+class StructModel(Trainer, layers.Layer):
     def __init__(self, units):
         layers.Layer.__init__(self)
         Trainer.__init__(self)
@@ -61,7 +62,7 @@ class StructModel(layers.Layer, Trainer):
         }
 
 
-class ListModel(layers.Layer, Trainer):
+class ListModel(Trainer, layers.Layer):
     def __init__(self, units):
         layers.Layer.__init__(self)
         Trainer.__init__(self)
@@ -81,9 +82,9 @@ class ListModel(layers.Layer, Trainer):
         return self.dense_1(x[0]) + self.dense_2(x[1])
 
 
-class TrainingTestingLayer(layers.Layer, Trainer):
-    def __init__(self):
-        layers.Layer.__init__(self)
+class TrainingTestingLayer(Trainer, layers.Layer):
+    def __init__(self, **kwargs):
+        layers.Layer.__init__(self, **kwargs)
         Trainer.__init__(self)
 
     def call(self, x, training=False):
@@ -95,7 +96,7 @@ class TrainingTestingLayer(layers.Layer, Trainer):
 class TestTrainer(testing.TestCase, parameterized.TestCase):
     @pytest.mark.requires_trainable_backend
     def test_metric_tracking(self):
-        class ModelWithMetric(layers.Dense, Trainer):
+        class ModelWithMetric(Trainer, layers.Dense):
             def __init__(self, units):
                 layers.Dense.__init__(
                     self,
@@ -131,6 +132,7 @@ class TestTrainer(testing.TestCase, parameterized.TestCase):
 
         # And those weights are tracked at the model level
         self.assertEqual(len(model.metrics_variables), 6)
+        self.assertLen(model.non_trainable_variables, 0)
 
         # Models with only weighted_metrics should have the same 3 metrics
         model_weighted = ModelWithMetric(units=3)
@@ -221,7 +223,7 @@ class TestTrainer(testing.TestCase, parameterized.TestCase):
         output = model.evaluate(x, y, batch_size=batch_size)
         self.assertAllClose(output, [16.0, 16.0])
         output = model.evaluate(x, y, batch_size=batch_size, return_dict=True)
-        self.assertTrue(isinstance(output, dict))
+        self.assertIsInstance(output, dict)
         self.assertIn("loss", output)
         self.assertIn("mean_squared_error", output)
         self.assertAllClose(output["mean_squared_error"], 16.0)
@@ -255,7 +257,7 @@ class TestTrainer(testing.TestCase, parameterized.TestCase):
         }
         batch_size = 16
         outputs = model.predict(x, batch_size=batch_size)
-        self.assertTrue(isinstance(outputs, dict))
+        self.assertIsInstance(outputs, dict)
         self.assertEqual(len(outputs), 2)
         self.assertAllClose(outputs["y_one"], 4 * np.ones((100, 3)))
         self.assertAllClose(outputs["y_two"], 4 * np.ones((100, 3)))
@@ -332,6 +334,76 @@ class TestTrainer(testing.TestCase, parameterized.TestCase):
         self.assertEqual(step_count.test_count, 3)
 
     @pytest.mark.requires_trainable_backend
+    def test_adds_loss_scaling_optimizer(self):
+        model = TrainingTestingLayer(dtype="mixed_float16")
+        model.compile(optimizer="rmsprop", loss="mse")
+        x = np.ones((128, 1))
+        y = np.zeros((128, 1))
+        model.fit(x, y, batch_size=32)
+        self.assertIsInstance(model.optimizer, optimizers.LossScaleOptimizer)
+
+        model = TrainingTestingLayer(dtype="mixed_float16")
+        model.compile(optimizer="rmsprop", loss="mse", auto_scale_loss=False)
+        x = np.ones((128, 1))
+        y = np.zeros((128, 1))
+        model.fit(x, y, batch_size=32)
+        self.assertIsInstance(model.optimizer, RMSprop)
+
+        model = TrainingTestingLayer(dtype="mixed_bfloat16")
+        model.compile(optimizer="rmsprop", loss="mse")
+        x = np.ones((128, 1))
+        y = np.zeros((128, 1))
+        model.fit(x, y, batch_size=32)
+        self.assertIsInstance(model.optimizer, RMSprop)
+
+    @pytest.mark.requires_trainable_backend
+    @pytest.mark.skipif(
+        backend.backend() == "torch",
+        reason="half precision unsupported on torch CPU.",
+    )
+    def test_loss_scaling_prevents_underflow(self):
+        class DeepModel(Trainer, layers.Layer):
+            def __init__(self):
+                layers.Layer.__init__(self, dtype="mixed_float16")
+                Trainer.__init__(self)
+                self.layers = []
+                for _ in range(15):
+                    # Sigmoid has a small gradient, will eventually underflow.
+                    self.layers.append(
+                        layers.Dense(
+                            1,
+                            use_bias=False,
+                            kernel_initializer="ones",
+                            activation="sigmoid",
+                            dtype="mixed_float16",
+                        )
+                    )
+
+            def call(self, x):
+                for layer in self.layers:
+                    x = layer(x)
+                return x
+
+        loss = losses.MeanSquaredError()
+        # Blow up any gradient updates, so underflow is obvious.
+        optimizer = optimizers.SGD(learning_rate=1e9)
+        model = DeepModel()
+        model.compile(optimizer, loss=loss, auto_scale_loss=False)
+        model.fit(np.ones((1, 1)), np.ones((1, 1)), batch_size=1)
+        first_kernel = model.layers[0].kernel
+        # Without autoscaling, the first dense will not update.
+        self.assertEqual(first_kernel, np.ones_like(first_kernel))
+
+        # Blow up any gradient updates, so underflow is obvious.
+        optimizer = optimizers.SGD(learning_rate=1e9)
+        model = DeepModel()
+        model.compile(optimizer, loss=loss, auto_scale_loss=True)
+        model.fit(np.ones((1, 1)), np.ones((1, 1)), batch_size=1)
+        first_kernel = model.layers[0].kernel
+        # With autoscaling, the first dense will update.
+        self.assertNotEqual(first_kernel, np.ones_like(first_kernel))
+
+    @pytest.mark.requires_trainable_backend
     def test_training_arg(self):
         model = TrainingTestingLayer()
         model.compile(optimizer="rmsprop", loss="mse")
@@ -366,27 +438,27 @@ class TestTrainer(testing.TestCase, parameterized.TestCase):
             jit_compile=jit_compile,
         )
         logs = model.train_on_batch(x, y)
-        self.assertTrue(isinstance(logs, list))
+        self.assertIsInstance(logs, list)
         self.assertEqual(len(logs), 2)
         self.assertAlmostEqual(logs[0], 16.0)
 
         logs = model.train_on_batch(x, y, return_dict=True)
-        self.assertTrue(isinstance(logs, dict))
+        self.assertIsInstance(logs, dict)
         self.assertEqual(len(logs), 2)
         self.assertAlmostEqual(logs["loss"], 15.579)
 
         logs = model.test_on_batch(x, y)
-        self.assertTrue(isinstance(logs, list))
+        self.assertIsInstance(logs, list)
         self.assertEqual(len(logs), 2)
         self.assertAlmostEqual(logs[0], 15.173)
 
         logs = model.test_on_batch(x, y, return_dict=True)
-        self.assertTrue(isinstance(logs, dict))
+        self.assertIsInstance(logs, dict)
         self.assertEqual(len(logs), 2)
         self.assertAlmostEqual(logs["loss"], 14.97)
 
         output = model.predict_on_batch(x)
-        self.assertTrue(isinstance(output, np.ndarray))
+        self.assertIsInstance(output, np.ndarray)
         self.assertAllClose(output[0], np.array([3.789511, 3.789511, 3.789511]))
 
         # With sample weights
@@ -420,16 +492,16 @@ class TestTrainer(testing.TestCase, parameterized.TestCase):
             jit_compile=jit_compile,
         )
         output = model.predict_on_batch(x)
-        self.assertTrue(isinstance(output, np.ndarray))
+        self.assertIsInstance(output, np.ndarray)
         self.assertAllClose(output[0], np.array([4.0, 4.0, 4.0]))
 
         logs = model.test_on_batch(x, y)
-        self.assertTrue(isinstance(logs, list))
+        self.assertIsInstance(logs, list)
         self.assertEqual(len(logs), 2)
         self.assertAlmostEqual(logs[0], 16.0)
 
         logs = model.test_on_batch(x, y, return_dict=True)
-        self.assertTrue(isinstance(logs, dict))
+        self.assertIsInstance(logs, dict)
         self.assertEqual(len(logs), 2)
         self.assertAlmostEqual(logs["loss"], 16.0)
 
@@ -525,7 +597,9 @@ class TestTrainer(testing.TestCase, parameterized.TestCase):
                 assert keys == ["outputs"]
 
         model = ExampleModel(units=3)
-        model.compile(optimizer="adam", loss="mse", metrics=["mae"])
+        model.compile(
+            optimizer="adam", loss="mse", metrics=["mean_absolute_error"]
+        )
         x = np.ones((16, 4))
         y = np.zeros((16, 3))
         x_test = np.ones((16, 4))
@@ -651,12 +725,16 @@ class TestTrainer(testing.TestCase, parameterized.TestCase):
         inputs = layers.Input((2,))
         outputs = layers.Dense(3)(inputs)
         model = keras_core.Model(inputs, outputs)
-        model.compile(optimizer="sgd", loss="mse", metrics=["mse"])
+        model.compile(
+            optimizer="sgd", loss="mse", metrics=["mean_squared_error"]
+        )
         history_1 = model.fit(np.ones((3, 2)), np.ones((3, 3))).history
         eval_out_1 = model.evaluate(
             np.ones((3, 2)), np.ones((3, 3)), return_dict=True
         )
-        model.compile(optimizer="sgd", loss="mse", metrics=["mae"])
+        model.compile(
+            optimizer="sgd", loss="mse", metrics=["mean_absolute_error"]
+        )
         history_2 = model.fit(np.ones((3, 2)), np.ones((3, 3))).history
         eval_out_2 = model.evaluate(
             np.ones((3, 2)), np.ones((3, 3)), return_dict=True
@@ -700,3 +778,42 @@ class TestTrainer(testing.TestCase, parameterized.TestCase):
         self.assertEqual(predict_out.shape, (3, 2))
         predict_out = model.predict_on_batch([np.ones((3, 2)), np.ones((3, 3))])
         self.assertEqual(predict_out.shape, (3, 2))
+
+    @pytest.mark.requires_trainable_backend
+    def test_validation_data_infinite_generator(self):
+        # Test that you can pass an infinite generator to `validation_data`
+        # arg of fit() as well as a `validation_steps` argument and that
+        # validation only runs for the correct number of steps.
+        inputs = layers.Input((2,))
+        outputs = layers.Dense(3)(inputs)
+        model = keras_core.Model(inputs, outputs)
+        model.compile(optimizer="sgd", loss="mse", metrics=["mse"])
+
+        class Recorder(keras_core.callbacks.Callback):
+            def __init__(self):
+                self.train_counter = 0
+                self.val_counter = 0
+
+            def on_train_batch_end(self, *args, **kwargs):
+                self.train_counter += 1
+
+            def on_test_batch_end(self, *args, **kwargs):
+                self.val_counter += 1
+
+        def infinite_gen():
+            while True:
+                yield np.ones((2, 2)), np.ones((2, 3))
+
+        recorder = Recorder()
+
+        model.fit(
+            infinite_gen(),
+            validation_data=infinite_gen(),
+            steps_per_epoch=3,
+            validation_steps=4,
+            epochs=1,
+            shuffle=False,
+            callbacks=[recorder],
+        )
+        self.assertEqual(recorder.train_counter, 3)
+        self.assertEqual(recorder.val_counter, 4)

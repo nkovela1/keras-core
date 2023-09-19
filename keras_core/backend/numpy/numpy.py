@@ -216,7 +216,7 @@ def diagonal(x, offset=0, axis1=0, axis2=1):
 
 
 def digitize(x, bins):
-    return np.digitize(x, bins)
+    return np.digitize(x, bins).astype(np.int32)
 
 
 def dot(x, y):
@@ -548,7 +548,10 @@ def vstack(xs):
 
 
 def where(condition, x1, x2):
-    return np.where(condition, x1, x2)
+    if x1 is not None and x2 is not None:
+        return np.where(condition, x1, x2)
+    else:
+        return np.where(condition)
 
 
 def divide(x1, x2):
