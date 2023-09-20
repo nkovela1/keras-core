@@ -29,7 +29,7 @@ else:
 
 
 # A model is just a layer mixed in with a Trainer.
-class ExampleModel(layers.Dense, Trainer):
+class ExampleModel(Trainer, layers.Dense):
     def __init__(self, units):
         layers.Dense.__init__(
             self,
@@ -40,7 +40,7 @@ class ExampleModel(layers.Dense, Trainer):
         Trainer.__init__(self)
 
 
-class StructModel(layers.Layer, Trainer):
+class StructModel(Trainer, layers.Layer):
     def __init__(self, units):
         layers.Layer.__init__(self)
         Trainer.__init__(self)
@@ -62,7 +62,7 @@ class StructModel(layers.Layer, Trainer):
         }
 
 
-class ListModel(layers.Layer, Trainer):
+class ListModel(Trainer, layers.Layer):
     def __init__(self, units):
         layers.Layer.__init__(self)
         Trainer.__init__(self)
@@ -82,7 +82,7 @@ class ListModel(layers.Layer, Trainer):
         return self.dense_1(x[0]) + self.dense_2(x[1])
 
 
-class TrainingTestingLayer(layers.Layer, Trainer):
+class TrainingTestingLayer(Trainer, layers.Layer):
     def __init__(self, **kwargs):
         layers.Layer.__init__(self, **kwargs)
         Trainer.__init__(self)
@@ -96,7 +96,7 @@ class TrainingTestingLayer(layers.Layer, Trainer):
 class TestTrainer(testing.TestCase, parameterized.TestCase):
     @pytest.mark.requires_trainable_backend
     def test_metric_tracking(self):
-        class ModelWithMetric(layers.Dense, Trainer):
+        class ModelWithMetric(Trainer, layers.Dense):
             def __init__(self, units):
                 layers.Dense.__init__(
                     self,
@@ -132,6 +132,7 @@ class TestTrainer(testing.TestCase, parameterized.TestCase):
 
         # And those weights are tracked at the model level
         self.assertEqual(len(model.metrics_variables), 6)
+        self.assertLen(model.non_trainable_variables, 0)
 
         # Models with only weighted_metrics should have the same 3 metrics
         model_weighted = ModelWithMetric(units=3)
@@ -261,6 +262,63 @@ class TestTrainer(testing.TestCase, parameterized.TestCase):
         self.assertAllClose(outputs["y_one"], 4 * np.ones((100, 3)))
         self.assertAllClose(outputs["y_two"], 4 * np.ones((100, 3)))
 
+    @pytest.mark.skipif(
+        backend.backend() != "jax",
+        reason="Memory optimization is only implemented in JAX",
+    )
+    def test_fit_eval_flow_for_jax_model_weights(self):
+        model = ExampleModel(units=3)
+        epochs = 3
+        batch_size = 20
+        steps_per_epoch = 7
+        dataset_size = batch_size * (steps_per_epoch - 2)
+        x = np.ones((dataset_size, 4))
+        y = np.zeros((dataset_size, 3))
+
+        class ModelWeightCheck(Callback):
+            def __init__(self):
+                super().__init__()
+
+            # Note that we access model via self._model since self.model
+            # will trigger a sync of the jax training state back to the model.
+            def on_train_batch_begin(self, batch, logs=None):
+                for v in self._model.trainable_variables:
+                    assert v._value is None
+                for v in self._model.non_trainable_variables:
+                    assert v._value is None
+                for v in self._model.optimizer.variables:
+                    assert v._value is None
+                for v in self._model.metrics_variables:
+                    assert v._value is None
+
+            def on_test_batch_begin(self, batch, logs=None):
+                for v in self._model.non_trainable_variables:
+                    assert v._value is None
+                for v in self._model.metrics_variables:
+                    assert v._value is None
+
+        model.compile(
+            optimizer=optimizers.SGD(),
+            loss=losses.MeanSquaredError(),
+            metrics=[metrics.MeanSquaredError()],
+        )
+
+        model.fit(
+            x,
+            y,
+            batch_size=batch_size,
+            steps_per_epoch=steps_per_epoch,
+            epochs=epochs,
+            callbacks=[ModelWeightCheck()],
+        )
+
+        model.evaluate(
+            x,
+            y,
+            batch_size=batch_size,
+            callbacks=[ModelWeightCheck()],
+        )
+
     @pytest.mark.requires_trainable_backend
     @pytest.mark.skipif(
         backend.backend() == "torch",
@@ -361,7 +419,7 @@ class TestTrainer(testing.TestCase, parameterized.TestCase):
         reason="half precision unsupported on torch CPU.",
     )
     def test_loss_scaling_prevents_underflow(self):
-        class DeepModel(layers.Layer, Trainer):
+        class DeepModel(Trainer, layers.Layer):
             def __init__(self):
                 layers.Layer.__init__(self, dtype="mixed_float16")
                 Trainer.__init__(self)

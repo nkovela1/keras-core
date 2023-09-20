@@ -1,6 +1,7 @@
 import numpy as np
 import torch
 
+from keras_core.backend import config
 from keras_core.backend.torch.core import cast
 from keras_core.backend.torch.core import convert_to_tensor
 from keras_core.backend.torch.core import get_device
@@ -91,7 +92,7 @@ def zeros(shape, dtype="float32"):
 
 def zeros_like(x, dtype=None):
     x = convert_to_tensor(x)
-    dtype = to_torch_dtype(dtype)
+    dtype = to_torch_dtype(dtype or x.dtype)
     return torch.zeros_like(x, dtype=dtype)
 
 
@@ -160,6 +161,13 @@ def append(
 
 
 def arange(start, stop=None, step=1, dtype=None):
+    if dtype is None:
+        if hasattr(start, "dtype"):
+            dtype = start.dtype
+        elif isinstance(start, int):
+            dtype = "int32"
+        else:
+            dtype = config.floatx()
     dtype = to_torch_dtype(dtype)
     if stop is None:
         return torch.arange(end=start, dtype=dtype, device=get_device())
@@ -245,7 +253,25 @@ def average(x, axis=None, weights=None):
 
 def bincount(x, weights=None, minlength=0):
     x = convert_to_tensor(x, dtype=int)
-    weights = convert_to_tensor(weights)
+    if weights is not None:
+        weights = convert_to_tensor(weights)
+    if len(x.shape) == 2:
+        if weights is None:
+
+            def bincount_fn(arr):
+                return torch.bincount(arr, minlength=minlength)
+
+            bincounts = list(map(bincount_fn, x))
+        else:
+
+            def bincount_fn(arr_w):
+                return torch.bincount(
+                    arr_w[0], weights=arr_w[1], minlength=minlength
+                )
+
+            bincounts = list(map(bincount_fn, zip(x, weights)))
+
+        return torch.stack(bincounts)
     return torch.bincount(x, weights, minlength)
 
 
@@ -800,22 +826,34 @@ def sort(x, axis=-1):
 
 def split(x, indices_or_sections, axis=0):
     x = convert_to_tensor(x)
+    dim = x.shape[axis]
     if isinstance(indices_or_sections, (list, tuple)):
         idxs = convert_to_tensor(indices_or_sections)
         start_size = indices_or_sections[0]
-        end_size = x.shape[axis] - indices_or_sections[-1]
+        end_size = dim - indices_or_sections[-1]
         chunk_sizes = (
             [start_size]
             + torch.diff(idxs).type(torch.int).tolist()
             + [end_size]
         )
     else:
-        chunk_sizes = x.shape[axis] // indices_or_sections
-    return torch.split(
+        if dim % indices_or_sections != 0:
+            raise ValueError(
+                f"Received indices_or_sections={indices_or_sections} "
+                f"(interpreted as a number of sections) and axis={axis}, "
+                f"but input dimension x.shape[{axis}]={x.shape[axis]} "
+                f"is not divisible by {indices_or_sections}. "
+                f"Full input shape: x.shape={x.shape}"
+            )
+        chunk_sizes = dim // indices_or_sections
+    out = torch.split(
         tensor=x,
         split_size_or_sections=chunk_sizes,
         dim=axis,
     )
+    if dim == 0 and isinstance(indices_or_sections, int):
+        out = tuple(out[0].clone() for _ in range(indices_or_sections))
+    return out
 
 
 def stack(x, axis=0):
